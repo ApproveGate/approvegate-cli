@@ -76,7 +76,11 @@ class Handler(BaseHTTPRequestHandler):
         if mode == "block":
             resp = {"decision": "block", "reason": "No deploy authorization recorded for release."}
         else:
-            resp = {"decision": "allow", "reason": "Approved and artifact matches bound SHA."}
+            resp = {
+                "decision": "allow",
+                "reason": "Approved and artifact matches bound SHA.",
+                "releaseRequestUrl": "http://localhost:3000/app/acme-corp-1/release-requests/approval-123",
+            }
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json")

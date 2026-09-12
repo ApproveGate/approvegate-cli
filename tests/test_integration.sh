@@ -83,6 +83,7 @@ run_check() {
 out="$(run_check allow)"; code=$?
 assert_eq "allow: exit code" "0" "$code"
 assert_contains "allow: prints configuration header" "$out" "Approvegate check configuration:"
+assert_contains "allow: prints full endpoint path" "$out" "endpoint: http://127.0.0.1:${PORT}/mode/allow"
 assert_contains "allow: prints service" "$out" "service: test-svc"
 assert_contains "allow: prints release" "$out" "release: v1.0.0"
 assert_contains "allow: prints branch" "$out" "branch: main"
@@ -90,6 +91,7 @@ assert_contains "allow: prints environment" "$out" "environment: staging"
 assert_contains "allow: prints short artifact sha" "$out" "artifactSha: abc123def456"
 assert_contains "allow: prints HTTP status" "$out" "Approvegate API returned HTTP 200."
 assert_contains "allow: prints decision" "$out" "Approvegate decision: allow"
+assert_contains "allow: prints release request URL" "$out" "Approvegate release request: http://localhost:3000/app/acme-corp-1/release-requests/approval-123"
 assert_contains "allow: confirmation message" "$out" "allowed"
 assert_not_contains "allow: API key not leaked" "$out" "$DUMMY_KEY"
 

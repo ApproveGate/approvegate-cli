@@ -80,7 +80,7 @@ The CLI prints a safe request summary before contacting Approvegate:
 
 ```text
 Approvegate check configuration:
-  endpoint: https://approvegate.example.com/...
+  endpoint: https://approvegate.example.com/api/v1/checks
   service: ledger-api
   release: v2.14.3
   branch: (none)
@@ -89,6 +89,10 @@ Approvegate check configuration:
   forceApprove: false
   timeoutSeconds: 10
   maxAttempts: 3
+Approvegate API request attempt 1/3...
+Approvegate API returned HTTP 200.
+Approvegate decision: allow
+Approvegate release request: https://approvegate.example.com/app/acme-corp-1/release-requests/cmtxrt6ef00008ompx0kxlmku
 ```
 
 The API key and raw headers are never logged.

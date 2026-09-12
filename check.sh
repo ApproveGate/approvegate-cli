@@ -72,7 +72,7 @@ short_value() {
 }
 
 api_url_display() {
-  printf '%s' "$API_URL" | sed -E 's#^(https?://[^/?]+).*#\1/...#'
+  printf '%s' "$API_URL" | sed -E 's/[?#].*$//'
 }
 
 print_request_summary() {
@@ -242,18 +242,26 @@ main() {
 
   local decision=""
   local reason_text=""
+  local release_request_url=""
   if decision="$(printf '%s' "$body" | jq -er '.decision' 2>/dev/null)"; then
     reason_text="$(printf '%s' "$body" | jq -r '.reason // "(no reason provided)"' 2>/dev/null)"
+    release_request_url="$(printf '%s' "$body" | jq -r '.releaseRequestUrl // ""' 2>/dev/null)"
   fi
 
   case "$decision" in
     allow)
       echo "Approvegate decision: allow"
+      if [[ -n "$release_request_url" ]]; then
+        echo "Approvegate release request: ${release_request_url}"
+      fi
       echo "Approvegate: deploy allowed for ${SERVICE}@${RELEASE:-$BRANCH} in ${ENVIRONMENT}. ${reason_text}"
       exit 0
       ;;
     block)
       echo "Approvegate decision: block" >&2
+      if [[ -n "$release_request_url" ]]; then
+        echo "Approvegate release request: ${release_request_url}" >&2
+      fi
       echo "Approvegate: deploy blocked for ${SERVICE}@${RELEASE:-$BRANCH} in ${ENVIRONMENT}: ${reason_text}" >&2
       exit 1
       ;;

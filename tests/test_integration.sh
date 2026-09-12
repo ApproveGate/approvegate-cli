@@ -82,12 +82,21 @@ run_check() {
 # --- allow ---
 out="$(run_check allow)"; code=$?
 assert_eq "allow: exit code" "0" "$code"
+assert_contains "allow: prints configuration header" "$out" "Approvegate check configuration:"
+assert_contains "allow: prints service" "$out" "service: test-svc"
+assert_contains "allow: prints release" "$out" "release: v1.0.0"
+assert_contains "allow: prints branch" "$out" "branch: main"
+assert_contains "allow: prints environment" "$out" "environment: staging"
+assert_contains "allow: prints short artifact sha" "$out" "artifactSha: abc123def456"
+assert_contains "allow: prints HTTP status" "$out" "Approvegate API returned HTTP 200."
+assert_contains "allow: prints decision" "$out" "Approvegate decision: allow"
 assert_contains "allow: confirmation message" "$out" "allowed"
 assert_not_contains "allow: API key not leaked" "$out" "$DUMMY_KEY"
 
 # --- block ---
 out="$(run_check block)"; code=$?
 assert_eq "block: exit code" "1" "$code"
+assert_contains "block: prints decision" "$out" "Approvegate decision: block"
 assert_contains "block: prints exact API reason" "$out" "No deploy authorization recorded for release."
 assert_not_contains "block: API key not leaked" "$out" "$DUMMY_KEY"
 

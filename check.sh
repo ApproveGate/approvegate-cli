@@ -58,6 +58,35 @@ extract_branch_from_ref() {
   fi
 }
 
+short_value() {
+  local value="$1"
+  if [[ -z "$value" ]]; then
+    printf '%s' "(none)"
+  elif [[ ${#value} -gt 12 ]]; then
+    printf '%s' "${value:0:12}..."
+  else
+    printf '%s' "$value"
+  fi
+}
+
+api_url_display() {
+  printf '%s' "$API_URL" | sed -E 's#^(https?://[^/?]+).*#\1/...#'
+}
+
+print_request_summary() {
+  local artifact_sha="$1"
+  echo "Approvegate check configuration:"
+  echo "  endpoint: $(api_url_display)"
+  echo "  service: ${SERVICE}"
+  echo "  release: ${RELEASE:-"(none)"}"
+  echo "  branch: ${BRANCH:-"(none)"}"
+  echo "  environment: ${ENVIRONMENT}"
+  echo "  artifactSha: $(short_value "$artifact_sha")"
+  echo "  forceApprove: ${FORCE_APPROVE}"
+  echo "  timeoutSeconds: ${REQUEST_TIMEOUT_SECONDS}"
+  echo "  maxAttempts: ${MAX_ATTEMPTS}"
+}
+
 usage_error() {
   echo "error: $1" >&2
   echo "usage: check.sh --service <name> [--release <tag>] [--branch <ref>] [--environment <env>] [--force-approve] [--reason <text>]" >&2
@@ -138,6 +167,7 @@ main() {
   validate_and_resolve
 
   local artifact_sha="${GITHUB_SHA:-}"
+  print_request_summary "$artifact_sha"
 
   local payload
   payload="$(jq -nc \
@@ -164,6 +194,7 @@ main() {
   local attempt=1
 
   while :; do
+    echo "Approvegate API request attempt ${attempt}/${MAX_ATTEMPTS}..."
     response="$(curl -sS \
       --max-time "$REQUEST_TIMEOUT_SECONDS" \
       -X POST "$API_URL" \
@@ -176,6 +207,7 @@ main() {
     if [[ $curl_status -eq 0 ]]; then
       http_status="${response##*$'\n'}"
       body="${response%$'\n'*}"
+      echo "Approvegate API returned HTTP ${http_status}."
       # Only 5xx is treated as a transient/"unreachable" condition worth
       # retrying — 4xx is a real rejection (bad key, bad payload) that
       # won't fix itself on retry.
@@ -212,10 +244,12 @@ main() {
 
   case "$decision" in
     allow)
+      echo "Approvegate decision: allow"
       echo "Approvegate: deploy allowed for ${SERVICE}@${RELEASE:-$BRANCH} in ${ENVIRONMENT}. ${reason_text}"
       exit 0
       ;;
     block)
+      echo "Approvegate decision: block" >&2
       echo "Approvegate: deploy blocked for ${SERVICE}@${RELEASE:-$BRANCH} in ${ENVIRONMENT}: ${reason_text}" >&2
       exit 1
       ;;

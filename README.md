@@ -80,7 +80,7 @@ The CLI prints a safe request summary before contacting Approvegate:
 
 ```text
 Approvegate check configuration:
-  endpoint: https://approvegate.example.com/api/v1/checks
+  checksEndpoint: https://approvegate.example.com/api/v1/checks
   service: ledger-api
   release: v2.14.3
   branch: (none)

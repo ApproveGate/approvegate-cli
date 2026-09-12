@@ -78,7 +78,7 @@ api_url_display() {
 print_request_summary() {
   local artifact_sha="$1"
   echo "Approvegate check configuration:"
-  echo "  endpoint: $(api_url_display)"
+  echo "  checksEndpoint: $(api_url_display)"
   echo "  service: ${SERVICE}"
   echo "  release: ${RELEASE:-"(none)"}"
   echo "  branch: ${BRANCH:-"(none)"}"
@@ -245,7 +245,7 @@ main() {
   local release_request_url=""
   if decision="$(printf '%s' "$body" | jq -er '.decision' 2>/dev/null)"; then
     reason_text="$(printf '%s' "$body" | jq -r '.reason // "(no reason provided)"' 2>/dev/null)"
-    release_request_url="$(printf '%s' "$body" | jq -r '.releaseRequestUrl // ""' 2>/dev/null)"
+    release_request_url="$(printf '%s' "$body" | jq -r '.releaseRequestUrl // .links.releaseRequest // .releaseRequestPath // ""' 2>/dev/null)"
   fi
 
   case "$decision" in

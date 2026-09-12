@@ -79,7 +79,7 @@ class Handler(BaseHTTPRequestHandler):
             resp = {
                 "decision": "allow",
                 "reason": "Approved and artifact matches bound SHA.",
-                "releaseRequestUrl": "http://localhost:3000/app/acme-corp-1/release-requests/approval-123",
+                "links": {"releaseRequest": "http://localhost:3000/app/acme-corp-1/release-requests/approval-123"},
             }
 
         self.send_response(200)

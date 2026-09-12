@@ -83,7 +83,7 @@ run_check() {
 out="$(run_check allow)"; code=$?
 assert_eq "allow: exit code" "0" "$code"
 assert_contains "allow: prints configuration header" "$out" "Approvegate check configuration:"
-assert_contains "allow: prints full endpoint path" "$out" "endpoint: http://127.0.0.1:${PORT}/mode/allow"
+assert_contains "allow: prints full checks endpoint path" "$out" "checksEndpoint: http://127.0.0.1:${PORT}/mode/allow"
 assert_contains "allow: prints service" "$out" "service: test-svc"
 assert_contains "allow: prints release" "$out" "release: v1.0.0"
 assert_contains "allow: prints branch" "$out" "branch: main"

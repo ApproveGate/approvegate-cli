@@ -1,0 +1,20 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shellcheck
+        run: shellcheck check.sh
+
+      - name: Unit tests
+        run: bash tests/test_unit.sh
+
+      - name: Integration tests
+        run: bash tests/test_integration.sh

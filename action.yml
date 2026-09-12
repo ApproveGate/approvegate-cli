@@ -1,0 +1,70 @@
+name: 'Approvegate Check'
+description: 'Blocks the deploy unless it has a valid approval record'
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  service:
+    description: 'Service name being deployed. Always required — there is no reliable way to auto-detect this in a monorepo.'
+    required: true
+  release:
+    description: 'Release/version identifier. If omitted, derived from a tag-triggered run (refs/tags/v2.14.3 -> v2.14.3); required otherwise.'
+    required: false
+  environment:
+    description: "Deploy environment. If omitted, falls back to this job's environment: name when GitHub Actions exposes one; required otherwise."
+    required: false
+  force-approve:
+    description: 'Emergency override. When "true", the check always allows the deploy; use with reason.'
+    required: false
+    default: 'false'
+  reason:
+    description: 'Reason text recorded alongside force-approve (or any check call).'
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Run Approvegate check
+      shell: bash
+      env:
+        # Forwarded explicitly so the requirement is visible at the call site,
+        # matching the documented customer usage snippet.
+        APPROVEGATE_API_KEY: ${{ env.APPROVEGATE_API_KEY }}
+        APPROVEGATE_API_URL: ${{ env.APPROVEGATE_API_URL }}
+        INPUT_SERVICE: ${{ inputs.service }}
+        INPUT_RELEASE: ${{ inputs.release }}
+        INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        INPUT_FORCE_APPROVE: ${{ inputs.force-approve }}
+        INPUT_REASON: ${{ inputs.reason }}
+        # job.environment.name is only populated when the calling job sets
+        # environment:. Untrusted inputs are passed via env vars (not
+        # interpolated into the script) to avoid shell-injection from
+        # crafted input values.
+        JOB_ENVIRONMENT_NAME: ${{ job.environment.name }}
+      run: |
+        set -euo pipefail
+
+        environment="$INPUT_ENVIRONMENT"
+        if [ -z "$environment" ]; then
+          environment="$JOB_ENVIRONMENT_NAME"
+        fi
+
+        args=(--service "$INPUT_SERVICE")
+        if [ -n "$INPUT_RELEASE" ]; then
+          args+=(--release "$INPUT_RELEASE")
+        fi
+        if [ -n "$environment" ]; then
+          args+=(--environment "$environment")
+        fi
+        if [ "$INPUT_FORCE_APPROVE" = "true" ]; then
+          args+=(--force-approve)
+        fi
+        if [ -n "$INPUT_REASON" ]; then
+          args+=(--reason "$INPUT_REASON")
+        fi
+
+        "${{ github.action_path }}/check.sh" "${args[@]}"

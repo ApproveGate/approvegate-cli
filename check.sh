@@ -29,7 +29,7 @@
 set -u
 set -o pipefail
 
-DEFAULT_API_URL="https://approvegate.trhks9stfcjz6.us-east-1.cs.amazonlightsail.com/api/v1/checks"
+DEFAULT_API_URL="https://approvegate.io/api/v1/checks"
 API_URL="${APPROVEGATE_API_URL:-$DEFAULT_API_URL}"
 REQUEST_TIMEOUT_SECONDS="${APPROVEGATE_TIMEOUT_SECONDS:-10}"
 MAX_ATTEMPTS="${APPROVEGATE_MAX_RETRIES:-3}"

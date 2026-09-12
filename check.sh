@@ -38,6 +38,8 @@ RETRY_DELAY_SECONDS="${APPROVEGATE_RETRY_DELAY_SECONDS:-1}"
 SERVICE=""
 RELEASE=""
 BRANCH=""
+RELEASE_PROVIDED="false"
+BRANCH_PROVIDED="false"
 ENVIRONMENT=""
 FORCE_APPROVE="false"
 REASON=""
@@ -104,11 +106,13 @@ parse_args() {
       --release)
         [[ $# -ge 2 ]] || usage_error "--release requires a value"
         RELEASE="$2"
+        RELEASE_PROVIDED="true"
         shift 2
         ;;
       --branch)
         [[ $# -ge 2 ]] || usage_error "--branch requires a value"
         BRANCH="$2"
+        BRANCH_PROVIDED="true"
         shift 2
         ;;
       --environment)
@@ -137,15 +141,15 @@ validate_and_resolve() {
     usage_error "--service is required (there is no reliable way to infer it in a monorepo)"
   fi
 
-  if [[ -z "$RELEASE" ]]; then
+  if [[ "$RELEASE_PROVIDED" != "true" && -z "$RELEASE" ]]; then
     RELEASE="$(extract_tag_from_ref "${GITHUB_REF:-}")"
   fi
 
-  if [[ -z "$BRANCH" ]]; then
+  if [[ "$BRANCH_PROVIDED" != "true" && -z "$BRANCH" && -z "$RELEASE" ]]; then
     BRANCH="$(extract_branch_from_ref "${GITHUB_REF:-}")"
   fi
 
-  if [[ -z "$BRANCH" && "${GITHUB_REF_TYPE:-}" == "branch" ]]; then
+  if [[ "$BRANCH_PROVIDED" != "true" && -z "$BRANCH" && -z "$RELEASE" && "${GITHUB_REF_TYPE:-}" == "branch" ]]; then
     BRANCH="${GITHUB_REF_NAME:-}"
   fi
 

@@ -147,6 +147,23 @@ assert_contains "force-approve: request included forceApprove:true" "$logged_bod
 assert_contains "force-approve: request included branch" "$logged_body" '"branch":"main"'
 assert_contains "force-approve: request included the reason" "$logged_body" "emergency rollback fix"
 
+# If a release is explicitly supplied on a branch-triggered run, the CLI must not
+# silently add branch too. That would require an approval matching both fields.
+>"$REQUEST_LOG_FILE"
+out="$(APPROVEGATE_API_URL="http://127.0.0.1:${PORT}/mode/allow" \
+  APPROVEGATE_API_KEY="$DUMMY_KEY" \
+  APPROVEGATE_RETRY_DELAY_SECONDS=0 \
+  APPROVEGATE_TIMEOUT_SECONDS=1 \
+  GITHUB_REF="refs/heads/main" \
+  GITHUB_SHA="abc123def456" \
+  bash "$CHECK_SH" --service test-svc --release main --environment staging 2>&1)"
+code=$?
+assert_eq "explicit release on branch ref: exit code" "0" "$code"
+assert_contains "explicit release on branch ref: log shows no branch" "$out" "branch: (none)"
+logged_body="$(tail -n1 "$REQUEST_LOG_FILE")"
+assert_contains "explicit release on branch ref: request includes release" "$logged_body" '"release":"main"'
+assert_not_contains "explicit release on branch ref: request omits branch" "$logged_body" '"branch"'
+
 # Without force-approve, the same mode blocks (proves the mock isn't just always allowing).
 out="$(run_check force)"; code=$?
 assert_eq "force mode without --force-approve blocks" "1" "$code"

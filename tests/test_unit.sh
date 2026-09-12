@@ -49,6 +49,14 @@ assert_eq "branch ref extracts nothing" \
 assert_eq "empty ref extracts nothing" \
   "" "$(extract_tag_from_ref "")"
 
+# --- extract_branch_from_ref ---
+
+assert_eq "branch ref extracts branch" \
+  "main" "$(extract_branch_from_ref "refs/heads/main")"
+
+assert_eq "tag ref extracts no branch" \
+  "" "$(extract_branch_from_ref "refs/tags/v2.14.3")"
+
 # --- CLI validation (black-box subprocess; must fail before any API call) ---
 
 run_check() {
@@ -70,13 +78,18 @@ assert_contains "missing --service message names the flag" "$out" "--service is 
 
 out="$(run_check GITHUB_REF=refs/heads/main -- --service foo --environment staging 2>&1)"
 code=$?
-assert_eq "branch trigger without --release exits 1" "1" "$code"
-assert_contains "branch trigger without --release names the flag" "$out" "--release"
+assert_eq "branch-derived check without API key exits 1" "1" "$code"
+assert_contains "branch-derived check resolves; next failure is the API key" "$out" "APPROVEGATE_API_KEY"
 
 out="$(run_check GITHUB_REF=refs/tags/v9.9.9 -- --service foo --environment staging 2>&1)"
 code=$?
 assert_eq "tag trigger without --release still fails (no API key), not on release" "1" "$code"
 assert_contains "tag-derived release resolves; next failure is the API key" "$out" "APPROVEGATE_API_KEY"
+
+out="$(run_check -- --service foo --environment staging 2>&1)"
+code=$?
+assert_eq "missing --release and --branch exits 1" "1" "$code"
+assert_contains "missing release and branch message names both" "$out" "--release or --branch"
 
 out="$(run_check GITHUB_REF=refs/heads/main -- --service foo --release v1.0.0 2>&1)"
 code=$?

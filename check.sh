@@ -7,7 +7,7 @@
 # it can't leak into job logs or process listings.
 #
 # Usage:
-#   check.sh --service <name> [--release <tag>] [--environment <env>] \
+#   check.sh --service <name> [--release <tag>] [--branch <ref>] [--environment <env>] \
 #             [--force-approve] [--reason "<text>"]
 #
 # Required env:
@@ -17,8 +17,11 @@
 #   GITHUB_SHA                   Commit SHA, sent as artifactSha. Set automatically
 #                                 on GitHub Actions runners.
 #   GITHUB_REF                   Used to derive --release from a tag push
-#                                 (refs/tags/v2.14.3 -> v2.14.3) when --release is
-#                                 not passed explicitly.
+#                                 (refs/tags/v2.14.3 -> v2.14.3) or --branch from
+#                                 a branch push (refs/heads/main -> main) when not
+#                                 passed explicitly.
+#   GITHUB_REF_NAME              Used as a fallback for --branch on GitHub Actions
+#                                 branch-triggered runs.
 #   APPROVEGATE_TIMEOUT_SECONDS  Per-request curl timeout (default: 10).
 #   APPROVEGATE_MAX_RETRIES      Attempts on connection errors/timeouts/5xx (default: 3).
 #   APPROVEGATE_RETRY_DELAY_SECONDS  Delay between retry attempts (default: 1).
@@ -34,6 +37,7 @@ RETRY_DELAY_SECONDS="${APPROVEGATE_RETRY_DELAY_SECONDS:-1}"
 
 SERVICE=""
 RELEASE=""
+BRANCH=""
 ENVIRONMENT=""
 FORCE_APPROVE="false"
 REASON=""
@@ -46,9 +50,17 @@ extract_tag_from_ref() {
   fi
 }
 
+# Extracts "main" from "refs/heads/main"; prints nothing for any other ref.
+extract_branch_from_ref() {
+  local ref="$1"
+  if [[ "$ref" =~ ^refs/heads/(.+)$ ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  fi
+}
+
 usage_error() {
   echo "error: $1" >&2
-  echo "usage: check.sh --service <name> [--release <tag>] [--environment <env>] [--force-approve] [--reason <text>]" >&2
+  echo "usage: check.sh --service <name> [--release <tag>] [--branch <ref>] [--environment <env>] [--force-approve] [--reason <text>]" >&2
   exit 1
 }
 
@@ -63,6 +75,11 @@ parse_args() {
       --release)
         [[ $# -ge 2 ]] || usage_error "--release requires a value"
         RELEASE="$2"
+        shift 2
+        ;;
+      --branch)
+        [[ $# -ge 2 ]] || usage_error "--branch requires a value"
+        BRANCH="$2"
         shift 2
         ;;
       --environment)
@@ -93,9 +110,18 @@ validate_and_resolve() {
 
   if [[ -z "$RELEASE" ]]; then
     RELEASE="$(extract_tag_from_ref "${GITHUB_REF:-}")"
-    if [[ -z "$RELEASE" ]]; then
-      usage_error "no --release was passed and this run was not triggered by a tag push (GITHUB_REF=${GITHUB_REF:-<unset>}). Pass --release explicitly."
-    fi
+  fi
+
+  if [[ -z "$BRANCH" ]]; then
+    BRANCH="$(extract_branch_from_ref "${GITHUB_REF:-}")"
+  fi
+
+  if [[ -z "$BRANCH" && "${GITHUB_REF_TYPE:-}" == "branch" ]]; then
+    BRANCH="${GITHUB_REF_NAME:-}"
+  fi
+
+  if [[ -z "$RELEASE" && -z "$BRANCH" ]]; then
+    usage_error "no --release or --branch was passed, and neither could be derived from this run (GITHUB_REF=${GITHUB_REF:-<unset>}). Pass one explicitly."
   fi
 
   if [[ -z "$ENVIRONMENT" ]]; then
@@ -117,11 +143,14 @@ main() {
   payload="$(jq -nc \
     --arg service "$SERVICE" \
     --arg release "$RELEASE" \
+    --arg branch "$BRANCH" \
     --arg environment "$ENVIRONMENT" \
     --arg artifactSha "$artifact_sha" \
     --argjson forceApprove "$FORCE_APPROVE" \
     --arg reason "$REASON" \
-    '{service: $service, release: $release, environment: $environment, artifactSha: $artifactSha}
+    '{service: $service, environment: $environment, artifactSha: $artifactSha}
+     + (if $release != "" then {release: $release} else {} end)
+     + (if $branch != "" then {branch: $branch} else {} end)
      + (if $forceApprove then {forceApprove: true} else {} end)
      + (if $reason != "" then {reason: $reason} else {} end)')" || {
     echo "error: failed to build request payload" >&2
@@ -183,11 +212,11 @@ main() {
 
   case "$decision" in
     allow)
-      echo "Approvegate: deploy allowed for ${SERVICE}@${RELEASE} in ${ENVIRONMENT}. ${reason_text}"
+      echo "Approvegate: deploy allowed for ${SERVICE}@${RELEASE:-$BRANCH} in ${ENVIRONMENT}. ${reason_text}"
       exit 0
       ;;
     block)
-      echo "Approvegate: deploy blocked for ${SERVICE}@${RELEASE} in ${ENVIRONMENT}: ${reason_text}" >&2
+      echo "Approvegate: deploy blocked for ${SERVICE}@${RELEASE:-$BRANCH} in ${ENVIRONMENT}: ${reason_text}" >&2
       exit 1
       ;;
     *)

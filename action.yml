@@ -9,7 +9,10 @@ inputs:
     description: 'Service name being deployed. Always required — there is no reliable way to auto-detect this in a monorepo.'
     required: true
   release:
-    description: 'Release/version identifier. If omitted, derived from a tag-triggered run (refs/tags/v2.14.3 -> v2.14.3); required otherwise.'
+    description: 'Release/version identifier. If omitted, derived from a tag-triggered run (refs/tags/v2.14.3 -> v2.14.3) when possible.'
+    required: false
+  branch:
+    description: 'Branch/ref name being deployed. If omitted, derived from a branch-triggered run (refs/heads/main -> main) when possible.'
     required: false
   environment:
     description: "Deploy environment. If omitted, falls back to this job's environment: name when GitHub Actions exposes one; required otherwise."
@@ -37,6 +40,7 @@ runs:
         APPROVEGATE_API_URL: ${{ env.APPROVEGATE_API_URL }}
         INPUT_SERVICE: ${{ inputs.service }}
         INPUT_RELEASE: ${{ inputs.release }}
+        INPUT_BRANCH: ${{ inputs.branch }}
         INPUT_ENVIRONMENT: ${{ inputs.environment }}
         INPUT_FORCE_APPROVE: ${{ inputs.force-approve }}
         INPUT_REASON: ${{ inputs.reason }}
@@ -56,6 +60,9 @@ runs:
         args=(--service "$INPUT_SERVICE")
         if [ -n "$INPUT_RELEASE" ]; then
           args+=(--release "$INPUT_RELEASE")
+        fi
+        if [ -n "$INPUT_BRANCH" ]; then
+          args+=(--branch "$INPUT_BRANCH")
         fi
         if [ -n "$environment" ]; then
           args+=(--environment "$environment")

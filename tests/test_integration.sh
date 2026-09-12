@@ -76,7 +76,7 @@ run_check() {
   APPROVEGATE_RETRY_DELAY_SECONDS=0 \
   APPROVEGATE_TIMEOUT_SECONDS=1 \
   GITHUB_SHA="abc123def456" \
-  bash "$CHECK_SH" --service test-svc --release v1.0.0 --environment staging "$@" 2>&1
+  bash "$CHECK_SH" --service test-svc --release v1.0.0 --branch main --environment staging "$@" 2>&1
 }
 
 # --- allow ---
@@ -135,6 +135,7 @@ assert_contains "force-approve: confirmation message" "$out" "allowed"
 
 logged_body="$(tail -n1 "$REQUEST_LOG_FILE")"
 assert_contains "force-approve: request included forceApprove:true" "$logged_body" '"forceApprove":true'
+assert_contains "force-approve: request included branch" "$logged_body" '"branch":"main"'
 assert_contains "force-approve: request included the reason" "$logged_body" "emergency rollback fix"
 
 # Without force-approve, the same mode blocks (proves the mock isn't just always allowing).

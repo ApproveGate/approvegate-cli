@@ -88,8 +88,19 @@ assert_contains "tag-derived release resolves; next failure is the API key" "$ou
 
 out="$(run_check -- --service foo --environment staging 2>&1)"
 code=$?
-assert_eq "missing --release and --branch exits 1" "1" "$code"
-assert_contains "missing release and branch message names both" "$out" "--release or --branch"
+assert_eq "missing lookup key exits 1" "1" "$code"
+assert_contains "missing lookup key message names change-request-id" "$out" "--change-request-id"
+assert_contains "missing lookup key message names GITHUB_SHA" "$out" "GITHUB_SHA"
+
+out="$(run_check GITHUB_SHA=abc123 APPROVEGATE_API_KEY=dummy APPROVEGATE_API_URL=http://127.0.0.1:1 APPROVEGATE_TIMEOUT_SECONDS=1 APPROVEGATE_MAX_RETRIES=1 -- --service foo --environment staging 2>&1)"
+code=$?
+assert_eq "sha-only check resolves; next failure is network" "2" "$code"
+assert_contains "sha-only check reaches API path" "$out" "Approvegate API request attempt"
+
+out="$(run_check APPROVEGATE_API_KEY=dummy APPROVEGATE_API_URL=http://127.0.0.1:1 APPROVEGATE_TIMEOUT_SECONDS=1 APPROVEGATE_MAX_RETRIES=1 -- --service foo --change-request-id approval-123 --environment staging 2>&1)"
+code=$?
+assert_eq "change-request-id-only check resolves; next failure is network" "2" "$code"
+assert_contains "change-request-id-only check reaches API path" "$out" "Approvegate API request attempt"
 
 out="$(run_check GITHUB_REF=refs/heads/main -- --service foo --release v1.0.0 2>&1)"
 code=$?

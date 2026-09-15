@@ -199,6 +199,36 @@ assert_not_contains "explicit release on branch ref: request omits branch" "$log
 out="$(run_check force)"; code=$?
 assert_eq "force mode without --force-approve blocks" "1" "$code"
 
+# --- change-request-id: takes precedence as the lookup key and is sent verbatim ---
+>"$REQUEST_LOG_FILE"
+out="$(APPROVEGATE_API_URL="http://127.0.0.1:${PORT}/mode/allow" \
+  APPROVEGATE_API_KEY="$DUMMY_KEY" \
+  APPROVEGATE_RETRY_DELAY_SECONDS=0 \
+  APPROVEGATE_TIMEOUT_SECONDS=1 \
+  GITHUB_SHA="abc123def456" \
+  bash "$CHECK_SH" --service test-svc --change-request-id approval-123 --environment staging 2>&1)"
+code=$?
+assert_eq "change-request-id: exit code" "0" "$code"
+assert_contains "change-request-id: prints changeRequestId" "$out" "changeRequestId: approval-123"
+logged_body="$(tail -n1 "$REQUEST_LOG_FILE")"
+assert_contains "change-request-id: request includes changeRequestId" "$logged_body" '"changeRequestId":"approval-123"'
+
+# --- SHA-only check: no --release/--branch/--change-request-id, GITHUB_SHA carries the check ---
+>"$REQUEST_LOG_FILE"
+out="$(APPROVEGATE_API_URL="http://127.0.0.1:${PORT}/mode/allow" \
+  APPROVEGATE_API_KEY="$DUMMY_KEY" \
+  APPROVEGATE_RETRY_DELAY_SECONDS=0 \
+  APPROVEGATE_TIMEOUT_SECONDS=1 \
+  GITHUB_SHA="abc123def456" \
+  bash "$CHECK_SH" --service test-svc --environment staging 2>&1)"
+code=$?
+assert_eq "sha-only: exit code" "0" "$code"
+assert_contains "sha-only: log shows no release or branch" "$out" "release: (none)"
+logged_body="$(tail -n1 "$REQUEST_LOG_FILE")"
+assert_contains "sha-only: request includes artifactSha" "$logged_body" '"artifactSha":"abc123def456"'
+assert_not_contains "sha-only: request omits release" "$logged_body" '"release"'
+assert_not_contains "sha-only: request omits branch" "$logged_body" '"branch"'
+
 echo
 echo "integration tests: $pass_count passed, $fail_count failed"
 [[ $fail_count -eq 0 ]]

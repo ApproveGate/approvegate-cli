@@ -1,7 +1,7 @@
 # approvegate-cli
 
 A GitHub Action (and standalone script) that blocks a deploy job unless Approvegate
-has a recorded, valid approval for the service/release/environment being deployed.
+has a recorded, valid approval for the deploy being checked.
 
 ## Usage (GitHub Action)
 
@@ -28,11 +28,24 @@ how the approval was created:
     APPROVEGATE_API_KEY: ${{ secrets.APPROVEGATE_API_KEY }}
 ```
 
+To check a specific approval record directly, pass its ApproveGate ID:
+
+```yaml
+- uses: ApproveGate/approvegate-cli@v1
+  with:
+    service: ledger-api
+    change-request-id: cmtxrt6ef00008ompx0kxlmku
+    environment: production
+  env:
+    APPROVEGATE_API_KEY: ${{ secrets.APPROVEGATE_API_KEY }}
+```
+
 Inputs:
 
 | Input | Required | Notes |
 |---|---|---|
 | `service` | yes | No auto-detection — there's no reliable free signal for this in a monorepo. |
+| `change-request-id` | no | Checks a specific ApproveGate approval/change request record directly. |
 | `release` | no | Release/version identifier. Auto-derived from a tag push (`refs/tags/v2.14.3` → `v2.14.3`) when possible. |
 | `branch` | no | Branch/ref identifier. Auto-derived from a branch push only when no `release` is provided. |
 | `environment` | no | Falls back to the job's `environment:` name when GitHub Actions exposes it to the step. Required otherwise. |
@@ -48,7 +61,8 @@ Outputs:
 | `unverified` | `true` only when `on-unreachable: allow` let the deploy proceed without verification. |
 | `reason` | Human-readable decision or unverified fallback reason. |
 
-At least one of `release` or `branch` must be present after auto-resolution. If
+At least one lookup key must be present after auto-resolution: `change-request-id`,
+`release`, `branch`, or the commit SHA that GitHub exposes as `GITHUB_SHA`. If
 you explicitly pass `release`, the action does **not** also auto-add `branch`
 from `GITHUB_REF`; this prevents accidental checks that require an approval to
 match both fields.
@@ -128,9 +142,10 @@ available).
 
 ## What gets sent to Approvegate — and what doesn't
 
-Each check call sends only: `service`, `release` and/or `branch`, `environment`,
-the commit `artifactSha`, GitHub actor/run metadata, completed job statuses from
-the current workflow run, and (for the override path) `forceApprove`/`reason`.
+Each check call sends only: `service`, optional `changeRequestId`, `release`
+and/or `branch`, `environment`, the commit `artifactSha`, GitHub actor/run
+metadata, completed job statuses from the current workflow run, and (for the
+override path) `forceApprove`/`reason`.
 **No source code, file contents, or repository data is ever read or transmitted.** The
 `APPROVEGATE_API_KEY` is read only from an environment variable — it is never
 accepted as a CLI flag and never printed to the job log, including on error.
@@ -145,6 +160,7 @@ The CLI prints a safe request summary before contacting Approvegate:
 Approvegate check configuration:
   checksEndpoint: https://approvegate.example.com/api/v1/checks
   service: ledger-api
+  changeRequestId: (none)
   release: v2.14.3
   branch: (none)
   environment: production

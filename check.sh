@@ -7,7 +7,7 @@
 # it can't leak into job logs or process listings.
 #
 # Usage:
-#   check.sh --service <name> [--release <tag>] [--branch <ref>] [--environment <env>] \
+#   check.sh --service <name> [--change-request-id <id>] [--release <tag>] [--branch <ref>] [--environment <env>] \
 #             [--force-approve] [--reason "<text>"] [--on-unreachable fail|allow]
 #
 # Required env:
@@ -38,6 +38,7 @@ MAX_ATTEMPTS="${APPROVEGATE_MAX_RETRIES:-3}"
 RETRY_DELAY_SECONDS="${APPROVEGATE_RETRY_DELAY_SECONDS:-1}"
 
 SERVICE=""
+CHANGE_REQUEST_ID=""
 RELEASE=""
 BRANCH=""
 RELEASE_PROVIDED="false"
@@ -84,6 +85,7 @@ print_request_summary() {
   echo "Approvegate check configuration:"
   echo "  checksEndpoint: $(api_url_display)"
   echo "  service: ${SERVICE}"
+  echo "  changeRequestId: ${CHANGE_REQUEST_ID:-"(none)"}"
   echo "  release: ${RELEASE:-"(none)"}"
   echo "  branch: ${BRANCH:-"(none)"}"
   echo "  environment: ${ENVIRONMENT}"
@@ -96,7 +98,7 @@ print_request_summary() {
 
 usage_error() {
   echo "error: $1" >&2
-  echo "usage: check.sh --service <name> [--release <tag>] [--branch <ref>] [--environment <env>] [--force-approve] [--reason <text>] [--on-unreachable fail|allow]" >&2
+  echo "usage: check.sh --service <name> [--change-request-id <id>] [--release <tag>] [--branch <ref>] [--environment <env>] [--force-approve] [--reason <text>] [--on-unreachable fail|allow]" >&2
   exit 1
 }
 
@@ -147,6 +149,7 @@ write_unverified_deploy_file() {
   local reason_text="$2"
   jq -n \
     --arg service "$SERVICE" \
+    --arg changeRequestId "$CHANGE_REQUEST_ID" \
     --arg release "$RELEASE" \
     --arg branch "$BRANCH" \
     --arg environment "$ENVIRONMENT" \
@@ -171,6 +174,7 @@ write_unverified_deploy_file() {
       actor: {provider: $actorProvider, login: $actorLogin, id: $actorId, triggeringLogin: $triggeringActorLogin},
       ci: {provider: $ciProvider, repo: $ciRepo, workflow: $ciWorkflow, job: $ciJob, runId: $ciRunId, runAttempt: $ciRunAttempt, runUrl: $ciRunUrl}
     }
+    + (if $changeRequestId != "" then {changeRequestId: $changeRequestId} else {} end)
     + (if $release != "" then {release: $release} else {} end)
     + (if $branch != "" then {branch: $branch} else {} end)' >"$UNVERIFIED_DEPLOY_FILE"
 }
@@ -181,6 +185,11 @@ parse_args() {
       --service)
         [[ $# -ge 2 ]] || usage_error "--service requires a value"
         SERVICE="$2"
+        shift 2
+        ;;
+      --change-request-id)
+        [[ $# -ge 2 ]] || usage_error "--change-request-id requires a value"
+        CHANGE_REQUEST_ID="$2"
         shift 2
         ;;
       --release)
@@ -238,8 +247,8 @@ validate_and_resolve() {
     BRANCH="${GITHUB_REF_NAME:-}"
   fi
 
-  if [[ -z "$RELEASE" && -z "$BRANCH" ]]; then
-    usage_error "no --release or --branch was passed, and neither could be derived from this run (GITHUB_REF=${GITHUB_REF:-<unset>}). Pass one explicitly."
+  if [[ -z "$RELEASE" && -z "$BRANCH" && -z "$CHANGE_REQUEST_ID" && -z "${GITHUB_SHA:-}" ]]; then
+    usage_error "no lookup key was available: pass --change-request-id, --release, or --branch, or run with GITHUB_SHA set for a SHA-keyed check (GITHUB_REF=${GITHUB_REF:-<unset>})."
   fi
 
   if [[ -z "$ENVIRONMENT" ]]; then
@@ -273,6 +282,7 @@ main() {
   local payload
   payload="$(jq -nc \
     --arg service "$SERVICE" \
+    --arg changeRequestId "$CHANGE_REQUEST_ID" \
     --arg release "$RELEASE" \
     --arg branch "$BRANCH" \
     --arg environment "$ENVIRONMENT" \
@@ -295,6 +305,7 @@ main() {
       actor: {provider: $actorProvider, login: $actorLogin, id: $actorId, triggeringLogin: $triggeringActorLogin},
       ci: {provider: $ciProvider, repo: $ciRepo, workflow: $ciWorkflow, job: $ciJob, runId: $ciRunId, runAttempt: $ciRunAttempt, runUrl: $ciRunUrl},
       pipelineStatuses: $pipelineStatuses}
+     + (if $changeRequestId != "" then {changeRequestId: $changeRequestId} else {} end)
      + (if $release != "" then {release: $release} else {} end)
      + (if $branch != "" then {branch: $branch} else {} end)
      + (if $forceApprove then {forceApprove: true} else {} end)

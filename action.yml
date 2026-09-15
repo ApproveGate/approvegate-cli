@@ -8,6 +8,9 @@ inputs:
   service:
     description: 'Service name being deployed. Always required — there is no reliable way to auto-detect this in a monorepo.'
     required: true
+  change-request-id:
+    description: 'ApproveGate change request / approval record ID to check directly.'
+    required: false
   release:
     description: 'Release/version identifier. If omitted, derived from a tag-triggered run (refs/tags/v2.14.3 -> v2.14.3) when possible.'
     required: false
@@ -55,6 +58,7 @@ runs:
         APPROVEGATE_API_KEY: ${{ env.APPROVEGATE_API_KEY }}
         APPROVEGATE_API_URL: ${{ env.APPROVEGATE_API_URL }}
         INPUT_SERVICE: ${{ inputs.service }}
+        INPUT_CHANGE_REQUEST_ID: ${{ inputs.change-request-id }}
         INPUT_RELEASE: ${{ inputs.release }}
         INPUT_BRANCH: ${{ inputs.branch }}
         INPUT_ENVIRONMENT: ${{ inputs.environment }}
@@ -76,6 +80,9 @@ runs:
         fi
 
         args=(--service "$INPUT_SERVICE")
+        if [ -n "$INPUT_CHANGE_REQUEST_ID" ]; then
+          args+=(--change-request-id "$INPUT_CHANGE_REQUEST_ID")
+        fi
         if [ -n "$INPUT_RELEASE" ]; then
           args+=(--release "$INPUT_RELEASE")
         fi

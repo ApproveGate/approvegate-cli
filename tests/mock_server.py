@@ -29,6 +29,39 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass  # keep test output quiet
 
+    def do_GET(self):
+        if "/actions/runs/" in self.path and self.path.endswith("/jobs?per_page=100"):
+            resp = {
+                "jobs": [
+                    {
+                        "name": "unit-tests",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "html_url": "https://github.com/acme/ledger/actions/runs/1/job/10",
+                    },
+                    {
+                        "name": "security-scan",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "html_url": "https://github.com/acme/ledger/actions/runs/1/job/11",
+                    },
+                    {
+                        "name": "deploy",
+                        "status": "in_progress",
+                        "conclusion": None,
+                        "html_url": "https://github.com/acme/ledger/actions/runs/1/job/12",
+                    },
+                ]
+            }
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(resp).encode())
+            return
+
+        self.send_response(404)
+        self.end_headers()
+
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         raw_body = self.rfile.read(length) if length else b""

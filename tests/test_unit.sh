@@ -101,6 +101,16 @@ code=$?
 assert_eq "unknown flag exits 1" "1" "$code"
 assert_contains "unknown flag message" "$out" "unknown argument"
 
+out="$(run_check GITHUB_REF=refs/heads/main APPROVEGATE_API_KEY=dummy -- --service foo --environment staging --force-approve 2>&1)"
+code=$?
+assert_eq "force-approve without reason exits 1" "1" "$code"
+assert_contains "force-approve without reason names reason" "$out" "--reason is required"
+
+out="$(run_check GITHUB_REF=refs/heads/main APPROVEGATE_API_KEY=dummy -- --service foo --environment staging --on-unreachable maybe 2>&1)"
+code=$?
+assert_eq "invalid on-unreachable exits 1" "1" "$code"
+assert_contains "invalid on-unreachable message" "$out" "--on-unreachable must be either"
+
 echo
 echo "unit tests: $pass_count passed, $fail_count failed"
 [[ $fail_count -eq 0 ]]

@@ -24,6 +24,21 @@ inputs:
   reason:
     description: 'Reason text recorded alongside force-approve (or any check call).'
     required: false
+  on-unreachable:
+    description: 'What to do if ApproveGate is unreachable after retries: "fail" blocks the deploy, "allow" proceeds unverified.'
+    required: false
+    default: 'fail'
+
+outputs:
+  decision:
+    description: 'ApproveGate decision: allow or block.'
+    value: ${{ steps.approvegate-check.outputs.decision }}
+  unverified:
+    description: 'true when the deploy proceeded via on-unreachable: allow without verification.'
+    value: ${{ steps.approvegate-check.outputs.unverified }}
+  reason:
+    description: 'Human-readable decision or unverified fallback reason.'
+    value: ${{ steps.approvegate-check.outputs.reason }}
 
 runs:
   using: composite
@@ -32,6 +47,7 @@ runs:
       uses: actions/checkout@v4
 
     - name: Run Approvegate check
+      id: approvegate-check
       shell: bash
       env:
         # Forwarded explicitly so the requirement is visible at the call site,
@@ -44,6 +60,8 @@ runs:
         INPUT_ENVIRONMENT: ${{ inputs.environment }}
         INPUT_FORCE_APPROVE: ${{ inputs.force-approve }}
         INPUT_REASON: ${{ inputs.reason }}
+        INPUT_ON_UNREACHABLE: ${{ inputs.on-unreachable }}
+        GITHUB_TOKEN: ${{ github.token }}
         # job.environment.name is only populated when the calling job sets
         # environment:. Untrusted inputs are passed via env vars (not
         # interpolated into the script) to avoid shell-injection from
@@ -73,5 +91,13 @@ runs:
         if [ -n "$INPUT_REASON" ]; then
           args+=(--reason "$INPUT_REASON")
         fi
+        args+=(--on-unreachable "$INPUT_ON_UNREACHABLE")
 
         "${{ github.action_path }}/check.sh" "${args[@]}"
+
+    - name: Upload unverified deploy evidence
+      if: ${{ always() && hashFiles('approvegate-unverified-deploy.json') != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: approvegate-unverified-deploy
+        path: approvegate-unverified-deploy.json

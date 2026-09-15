@@ -46,13 +46,15 @@ DUMMY_KEY="test-dummy-api-key-should-never-appear-in-output"
 
 # --- start the mock server on an OS-assigned port ---
 SERVER_LOG="$(mktemp)"
+REQUEST_LOG_FILE="$(mktemp)"
+export REQUEST_LOG_FILE
 python3 "$MOCK_SERVER" 0 >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 
 cleanup() {
   kill "$SERVER_PID" 2>/dev/null || true
   wait "$SERVER_PID" 2>/dev/null || true
-  rm -f "$SERVER_LOG" "${REQUEST_LOG_FILE:-}"
+  rm -f "$SERVER_LOG" "${REQUEST_LOG_FILE:-}" "${GITHUB_OUTPUT_FILE:-}" "${GITHUB_STEP_SUMMARY_FILE:-}" approvegate-unverified-deploy.json
 }
 trap cleanup EXIT
 
@@ -76,10 +78,22 @@ run_check() {
   APPROVEGATE_RETRY_DELAY_SECONDS=0 \
   APPROVEGATE_TIMEOUT_SECONDS=1 \
   GITHUB_SHA="abc123def456" \
+  GITHUB_TOKEN="dummy-github-token" \
+  GITHUB_API_URL="http://127.0.0.1:${PORT}" \
+  GITHUB_SERVER_URL="https://github.com" \
+  GITHUB_REPOSITORY="acme/ledger" \
+  GITHUB_WORKFLOW="Deploy production" \
+  GITHUB_JOB="deploy" \
+  GITHUB_RUN_ID="1" \
+  GITHUB_RUN_ATTEMPT="2" \
+  GITHUB_ACTOR="mchen" \
+  GITHUB_ACTOR_ID="12345" \
+  GITHUB_TRIGGERING_ACTOR="incident-lead" \
   bash "$CHECK_SH" --service test-svc --release v1.0.0 --branch main --environment staging "$@" 2>&1
 }
 
 # --- allow ---
+>"$REQUEST_LOG_FILE"
 out="$(run_check allow)"; code=$?
 assert_eq "allow: exit code" "0" "$code"
 assert_contains "allow: prints configuration header" "$out" "Approvegate check configuration:"
@@ -94,6 +108,12 @@ assert_contains "allow: prints decision" "$out" "Approvegate decision: allow"
 assert_contains "allow: prints release request URL" "$out" "Approvegate release request: http://localhost:3000/app/acme-corp-1/release-requests/approval-123"
 assert_contains "allow: confirmation message" "$out" "allowed"
 assert_not_contains "allow: API key not leaked" "$out" "$DUMMY_KEY"
+logged_body="$(tail -n1 "$REQUEST_LOG_FILE")"
+assert_contains "allow: request included GitHub actor" "$logged_body" '"login":"mchen"'
+assert_contains "allow: request included triggering actor" "$logged_body" '"triggeringLogin":"incident-lead"'
+assert_contains "allow: request included GitHub run URL" "$logged_body" '"runUrl":"https://github.com/acme/ledger/actions/runs/1"'
+assert_contains "allow: request included pipeline status" "$logged_body" '"name":"unit-tests"'
+assert_contains "allow: request omitted in-progress deploy job status" "$logged_body" '"security-scan"'
 
 # --- block ---
 out="$(run_check block)"; code=$?
@@ -108,6 +128,17 @@ assert_eq "servererror: exit code" "2" "$code"
 assert_contains "servererror: distinct unreachable message" "$out" "Approvegate API unreachable"
 assert_contains "servererror: mentions retry attempts" "$out" "attempt"
 
+GITHUB_OUTPUT_FILE="$(mktemp)"
+GITHUB_STEP_SUMMARY_FILE="$(mktemp)"
+rm -f approvegate-unverified-deploy.json
+out="$(GITHUB_OUTPUT="$GITHUB_OUTPUT_FILE" GITHUB_STEP_SUMMARY="$GITHUB_STEP_SUMMARY_FILE" run_check servererror --on-unreachable allow)"; code=$?
+assert_eq "servererror with on-unreachable allow: exit code" "0" "$code"
+assert_contains "servererror with on-unreachable allow: output explains unverified deploy" "$out" "allowed without verification"
+assert_contains "servererror with on-unreachable allow: writes decision output" "$(cat "$GITHUB_OUTPUT_FILE")" "decision=allow"
+assert_contains "servererror with on-unreachable allow: writes unverified output" "$(cat "$GITHUB_OUTPUT_FILE")" "unverified=true"
+assert_contains "servererror with on-unreachable allow: writes summary" "$(cat "$GITHUB_STEP_SUMMARY_FILE")" "Deploy proceeded without ApproveGate verification"
+assert_contains "servererror with on-unreachable allow: writes evidence file" "$(cat approvegate-unverified-deploy.json)" '"service": "test-svc"'
+
 # --- malformed response body: rejected, not a silent allow ---
 out="$(run_check malformed)"; code=$?
 assert_eq "malformed: exit code" "1" "$code"
@@ -119,7 +150,7 @@ assert_eq "hang/timeout: exit code" "2" "$code"
 assert_contains "hang/timeout: distinct unreachable message" "$out" "Approvegate API unreachable"
 
 # --- connection refused (nothing listening) ---
-FREE_PORT="$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1]); s.close()")"
+FREE_PORT=$((PORT + 1))
 out="$(APPROVEGATE_API_URL="http://127.0.0.1:${FREE_PORT}/mode/allow" \
   APPROVEGATE_API_KEY="$DUMMY_KEY" \
   APPROVEGATE_RETRY_DELAY_SECONDS=0 \
@@ -132,8 +163,6 @@ assert_contains "connection refused: distinct unreachable message" "$out" "Appro
 assert_not_contains "connection refused: API key not leaked" "$out" "$DUMMY_KEY"
 
 # --- force-approve: always allow, and the request body actually carries the fields ---
-REQUEST_LOG_FILE="$(mktemp)"
-export REQUEST_LOG_FILE
 kill "$SERVER_PID" 2>/dev/null || true
 wait "$SERVER_PID" 2>/dev/null || true
 python3 "$MOCK_SERVER" "$PORT" >"$SERVER_LOG" 2>&1 &

@@ -36,8 +36,17 @@ Inputs:
 | `release` | no | Release/version identifier. Auto-derived from a tag push (`refs/tags/v2.14.3` → `v2.14.3`) when possible. |
 | `branch` | no | Branch/ref identifier. Auto-derived from a branch push only when no `release` is provided. |
 | `environment` | no | Falls back to the job's `environment:` name when GitHub Actions exposes it to the step. Required otherwise. |
-| `force-approve` | no | Emergency override — always allows the deploy. Pair with `reason`. |
-| `reason` | no | Recorded alongside the check, especially useful with `force-approve`. |
+| `force-approve` | no | Emergency override — always allows the deploy when `reason` is present. |
+| `reason` | no | Recorded alongside the check. Required with `force-approve`. |
+| `on-unreachable` | no | `fail` by default. Use `allow` to proceed unverified if Approvegate is unreachable after retries. |
+
+Outputs:
+
+| Output | Notes |
+|---|---|
+| `decision` | `allow` or `block`. |
+| `unverified` | `true` only when `on-unreachable: allow` let the deploy proceed without verification. |
+| `reason` | Human-readable decision or unverified fallback reason. |
 
 At least one of `release` or `branch` must be present after auto-resolution. If
 you explicitly pass `release`, the action does **not** also auto-add `branch`
@@ -45,8 +54,57 @@ from `GITHUB_REF`; this prevents accidental checks that require an approval to
 match both fields.
 
 The job fails (non-zero exit) if the deploy isn't approved, if Approvegate is
-unreachable, or if required inputs are missing — it never silently allows a
-deploy it couldn't verify.
+unreachable, or if required inputs are missing. The only exception is the explicit
+`on-unreachable: allow` fallback.
+
+## Emergency override
+
+`force-approve` is the manual override for a deploy Approvegate can reach and
+record. It always requires a reason:
+
+```yaml
+- uses: ApproveGate/approvegate-cli@v1
+  with:
+    service: ledger-api
+    release: v2.14.3
+    environment: production
+    force-approve: "true"
+    reason: "SEV1 rollback, incident INC-4821"
+  env:
+    APPROVEGATE_API_KEY: ${{ secrets.APPROVEGATE_API_KEY }}
+```
+
+Approvegate records the deploy as an override with the actor, SHA, run URL, and
+reason.
+
+## Unreachable fallback
+
+By default, network errors, timeouts, and 5xx responses fail the job after the
+configured retries:
+
+```yaml
+with:
+  on-unreachable: fail
+```
+
+For teams that need an outage escape hatch, `on-unreachable: allow` succeeds the
+step after retries, sets `unverified=true`, writes a job summary, and uploads
+`approvegate-unverified-deploy.json` as an artifact:
+
+```yaml
+- uses: ApproveGate/approvegate-cli@v1
+  with:
+    service: ledger-api
+    release: v2.14.3
+    environment: production
+    on-unreachable: allow
+  env:
+    APPROVEGATE_API_KEY: ${{ secrets.APPROVEGATE_API_KEY }}
+```
+
+This is intentionally different from `force-approve`: if the service is
+unreachable, Approvegate cannot record the deploy immediately. The GitHub run
+summary and artifact are the evidence for that unverified deploy.
 
 ## Usage (standalone script)
 
@@ -71,10 +129,15 @@ available).
 ## What gets sent to Approvegate — and what doesn't
 
 Each check call sends only: `service`, `release` and/or `branch`, `environment`,
-the commit `artifactSha`, and (for the override path) `forceApprove`/`reason`.
+the commit `artifactSha`, GitHub actor/run metadata, completed job statuses from
+the current workflow run, and (for the override path) `forceApprove`/`reason`.
 **No source code, file contents, or repository data is ever read or transmitted.** The
 `APPROVEGATE_API_KEY` is read only from an environment variable — it is never
 accepted as a CLI flag and never printed to the job log, including on error.
+
+The completed-job status capture uses the workflow token against the GitHub
+Actions jobs API. If that API call is unavailable or lacks permission, the check
+continues without `pipelineStatuses`.
 
 The CLI prints a safe request summary before contacting Approvegate:
 
@@ -87,6 +150,7 @@ Approvegate check configuration:
   environment: production
   artifactSha: abc123def456...
   forceApprove: false
+  onUnreachable: fail
   timeoutSeconds: 10
   maxAttempts: 3
 Approvegate API request attempt 1/3...

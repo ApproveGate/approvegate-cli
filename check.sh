@@ -3,7 +3,7 @@
 # Approvegate deploy check.
 #
 # Calls POST /api/v1/checks and exits 0 (allow) or non-zero (block / error).
-# Never accepts the API key as a flag — read only from APPROVEGATE_API_KEY so
+# Never accepts the API key as a flag — read only from a secret-backed env var so
 # it can't leak into job logs or process listings.
 #
 # Usage:
@@ -11,7 +11,8 @@
 #             [--force-approve] [--reason "<text>"] [--on-unreachable fail|allow]
 #
 # Required env:
-#   APPROVEGATE_API_KEY   Tenant API key, sent as the X-Api-Key header.
+#   APPROVEGATE_TOKEN      Preferred tenant token, sent as the X-Api-Key header.
+#   APPROVEGATE_API_KEY    Backward-compatible alias for APPROVEGATE_TOKEN.
 # Optional env:
 #   APPROVEGATE_API_URL          Overrides the checks endpoint (default: production).
 #   GITHUB_SHA                   Commit SHA, sent as artifactSha. Set automatically
@@ -263,8 +264,8 @@ validate_and_resolve() {
     usage_error "--reason is required when --force-approve is used"
   fi
 
-  if [[ -z "${APPROVEGATE_API_KEY:-}" ]]; then
-    usage_error "APPROVEGATE_API_KEY is not set. Set it as a secret-backed environment variable, never as a flag."
+  if [[ -z "${APPROVEGATE_TOKEN:-}" && -z "${APPROVEGATE_API_KEY:-}" ]]; then
+    usage_error "APPROVEGATE_TOKEN (or legacy APPROVEGATE_API_KEY) is not set. Set it as a secret-backed environment variable, never as a flag."
   fi
 }
 
@@ -326,7 +327,7 @@ main() {
       --max-time "$REQUEST_TIMEOUT_SECONDS" \
       -X POST "$API_URL" \
       -H "Content-Type: application/json" \
-      -H "X-Api-Key: $APPROVEGATE_API_KEY" \
+      -H "X-Api-Key: ${APPROVEGATE_TOKEN:-$APPROVEGATE_API_KEY}" \
       -d "$payload" \
       -w $'\n%{http_code}')"
     curl_status=$?

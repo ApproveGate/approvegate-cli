@@ -55,6 +55,7 @@ runs:
       env:
         # Forwarded explicitly so the requirement is visible at the call site,
         # matching the documented customer usage snippet.
+        APPROVEGATE_TOKEN: ${{ env.APPROVEGATE_TOKEN }}
         APPROVEGATE_API_KEY: ${{ env.APPROVEGATE_API_KEY }}
         APPROVEGATE_API_URL: ${{ env.APPROVEGATE_API_URL }}
         INPUT_SERVICE: ${{ inputs.service }}

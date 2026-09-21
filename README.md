@@ -1,7 +1,45 @@
-# approvegate-cli
+# Approvegate Check
 
-A GitHub Action (and standalone script) that blocks a deploy job unless Approvegate
-has a recorded, valid approval for the deploy being checked.
+[![Test](https://github.com/ApproveGate/approvegate-cli/actions/workflows/test.yml/badge.svg)](https://github.com/ApproveGate/approvegate-cli/actions/workflows/test.yml)
+
+A GitHub Action (and standalone script) that blocks a deploy job unless
+[ApproveGate](https://approvegate.io) has a recorded, valid approval for the
+deploy being checked.
+
+Drop it in front of a production deploy job and it becomes impossible to ship
+without a real approval on record — no more "someone clicked merge and hoped
+for the best." Every allow or block decision, along with any emergency
+override, is recorded against the release request in ApproveGate, so you get
+an audit trail for free.
+
+```yaml
+- uses: ApproveGate/approvegate-cli@v1.1.0
+  with:
+    service: ledger-api
+    release: v2.14.3
+    environment: production
+  env:
+    APPROVEGATE_TOKEN: ${{ secrets.APPROVEGATE_TOKEN }}
+```
+
+## New to ApproveGate?
+
+This action checks approvals against an [ApproveGate](https://approvegate.io)
+tenant — it doesn't create the approval workflow itself. ApproveGate is the
+change-management and deploy-gating app behind it: release requests, approver
+assignment and policy (minimum approvers, required roles, separation of
+duties), freeze windows, post-release sign-off, and a tamper-evident audit
+trail, all viewable in one dashboard.
+
+Public self-serve signup is currently closed while we onboard teams directly.
+If you want to try this action against a real tenant, email
+[cj@approvegate.io](mailto:cj@approvegate.io) or visit
+[approvegate.io](https://approvegate.io) to request access — we'll get you a
+tenant and an `APPROVEGATE_TOKEN` to drop into this action.
+
+Already have a tenant? Generate an API key from your ApproveGate account and
+store it as the `APPROVEGATE_TOKEN` secret in the repo or org running this
+action.
 
 ## Usage (GitHub Action)
 
@@ -158,7 +196,7 @@ The CLI prints a safe request summary before contacting Approvegate:
 
 ```text
 Approvegate check configuration:
-  checksEndpoint: https://approvegate.example.com/api/v1/checks
+  checksEndpoint: https://approvegate.io/api/v1/checks
   service: ledger-api
   changeRequestId: (none)
   release: v2.14.3
@@ -172,7 +210,7 @@ Approvegate check configuration:
 Approvegate API request attempt 1/3...
 Approvegate API returned HTTP 200.
 Approvegate decision: allow
-Approvegate release request: https://approvegate.example.com/app/acme-corp-1/release-requests/cmtxrt6ef00008ompx0kxlmku
+Approvegate release request: https://approvegate.io/app/acme-corp-1/release-requests/cmtxrt6ef00008ompx0kxlmku
 ```
 
 The API key and raw headers are never logged.
@@ -193,3 +231,9 @@ bash tests/test_unit.sh          # arg parsing / validation, no network
 bash tests/test_integration.sh   # end-to-end against tests/mock_server.py
 shellcheck check.sh
 ```
+
+## Questions / access requests
+
+Email [cj@approvegate.io](mailto:cj@approvegate.io) or see
+[approvegate.io](https://approvegate.io) — for bugs or usage questions about
+this action specifically, open a GitHub issue on this repo instead.

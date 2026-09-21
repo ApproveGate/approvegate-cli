@@ -214,12 +214,18 @@ logged_body="$(tail -n1 "$REQUEST_LOG_FILE")"
 assert_contains "change-request-id: request includes changeRequestId" "$logged_body" '"changeRequestId":"approval-123"'
 
 # --- SHA-only check: no --release/--branch/--change-request-id, GITHUB_SHA carries the check ---
+# GITHUB_REF/GITHUB_REF_TYPE/GITHUB_REF_NAME are cleared here because on a real
+# Actions runner they're ambient env vars (set for every job) that would otherwise
+# leak in and cause check.sh to auto-derive a branch, defeating the point of this case.
 >"$REQUEST_LOG_FILE"
 out="$(APPROVEGATE_API_URL="http://127.0.0.1:${PORT}/mode/allow" \
   APPROVEGATE_API_KEY="$DUMMY_KEY" \
   APPROVEGATE_RETRY_DELAY_SECONDS=0 \
   APPROVEGATE_TIMEOUT_SECONDS=1 \
   GITHUB_SHA="abc123def456" \
+  GITHUB_REF="" \
+  GITHUB_REF_TYPE="" \
+  GITHUB_REF_NAME="" \
   bash "$CHECK_SH" --service test-svc --environment staging 2>&1)"
 code=$?
 assert_eq "sha-only: exit code" "0" "$code"

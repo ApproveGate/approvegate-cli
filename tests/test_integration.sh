@@ -89,7 +89,7 @@ run_check() {
   GITHUB_ACTOR="mchen" \
   GITHUB_ACTOR_ID="12345" \
   GITHUB_TRIGGERING_ACTOR="incident-lead" \
-  bash "$CHECK_SH" --service test-svc --release v1.0.0 --branch main --environment staging "$@" 2>&1
+  bash "$CHECK_SH" --service test-svc --release v1.1.0 --branch main --environment staging "$@" 2>&1
 }
 
 # --- allow ---
@@ -99,7 +99,7 @@ assert_eq "allow: exit code" "0" "$code"
 assert_contains "allow: prints configuration header" "$out" "Approvegate check configuration:"
 assert_contains "allow: prints full checks endpoint path" "$out" "checksEndpoint: http://127.0.0.1:${PORT}/mode/allow"
 assert_contains "allow: prints service" "$out" "service: test-svc"
-assert_contains "allow: prints release" "$out" "release: v1.0.0"
+assert_contains "allow: prints release" "$out" "release: v1.1.0"
 assert_contains "allow: prints branch" "$out" "branch: main"
 assert_contains "allow: prints environment" "$out" "environment: staging"
 assert_contains "allow: prints short artifact sha" "$out" "artifactSha: abc123def456"
@@ -156,7 +156,7 @@ out="$(APPROVEGATE_API_URL="http://127.0.0.1:${FREE_PORT}/mode/allow" \
   APPROVEGATE_RETRY_DELAY_SECONDS=0 \
   APPROVEGATE_TIMEOUT_SECONDS=1 \
   GITHUB_SHA="abc123def456" \
-  bash "$CHECK_SH" --service test-svc --release v1.0.0 --environment staging 2>&1)"
+  bash "$CHECK_SH" --service test-svc --release v1.1.0 --environment staging 2>&1)"
 code=$?
 assert_eq "connection refused: exit code" "2" "$code"
 assert_contains "connection refused: distinct unreachable message" "$out" "Approvegate API unreachable"

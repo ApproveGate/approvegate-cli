@@ -102,7 +102,7 @@ code=$?
 assert_eq "change-request-id-only check resolves; next failure is network" "2" "$code"
 assert_contains "change-request-id-only check reaches API path" "$out" "Approvegate API request attempt"
 
-out="$(run_check GITHUB_REF=refs/heads/main -- --service foo --release v1.0.0 2>&1)"
+out="$(run_check GITHUB_REF=refs/heads/main -- --service foo --release v1.1.0 2>&1)"
 code=$?
 assert_eq "missing --environment exits 1" "1" "$code"
 assert_contains "missing --environment message names the flag" "$out" "--environment"

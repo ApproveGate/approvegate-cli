@@ -6,7 +6,7 @@ has a recorded, valid approval for the deploy being checked.
 ## Usage (GitHub Action)
 
 ```yaml
-- uses: ApproveGate/approvegate-cli@v1.0.0
+- uses: ApproveGate/approvegate-cli@v1.1.0
   with:
     service: ledger-api
     release: v2.14.3
@@ -19,7 +19,7 @@ For branch-gated deploys, pass the branch as the release identifier if that is
 how the approval was created:
 
 ```yaml
-- uses: ApproveGate/approvegate-cli@v1.0.0
+- uses: ApproveGate/approvegate-cli@v1.1.0
   with:
     service: ledger-api
     release: ${{ github.ref_name }}
@@ -31,7 +31,7 @@ how the approval was created:
 To check a specific approval record directly, pass its ApproveGate ID:
 
 ```yaml
-- uses: ApproveGate/approvegate-cli@v1.0.0
+- uses: ApproveGate/approvegate-cli@v1.1.0
   with:
     service: ledger-api
     change-request-id: cmtxrt6ef00008ompx0kxlmku
@@ -77,7 +77,7 @@ unreachable, or if required inputs are missing. The only exception is the explic
 record. It always requires a reason:
 
 ```yaml
-- uses: ApproveGate/approvegate-cli@v1.0.0
+- uses: ApproveGate/approvegate-cli@v1.1.0
   with:
     service: ledger-api
     release: v2.14.3
@@ -106,7 +106,7 @@ step after retries, sets `unverified=true`, writes a job summary, and uploads
 `approvegate-unverified-deploy.json` as an artifact:
 
 ```yaml
-- uses: ApproveGate/approvegate-cli@v1.0.0
+- uses: ApproveGate/approvegate-cli@v1.1.0
   with:
     service: ledger-api
     release: v2.14.3
@@ -181,7 +181,7 @@ The API key and raw headers are never logged.
 
 Pin one of:
 
-- **`@v1.0.0`** — pins this workflow to the released CLI version. Update this
+- **`@v1.1.0`** — pins this workflow to the released CLI version. Update this
   reference deliberately when adopting a newer release.
 - **A full commit SHA** — maximum trust and reproducibility; the action can
   never change under you without a new commit in your workflow file.

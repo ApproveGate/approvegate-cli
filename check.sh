@@ -339,6 +339,9 @@ main() {
       # Only 5xx is treated as a transient/"unreachable" condition worth
       # retrying — 4xx is a real rejection (bad key, bad payload) that
       # won't fix itself on retry.
+      if [[ "$http_status" -ge 500 ]]; then
+        echo "Approvegate API error response: ${body:-<empty>}" >&2
+      fi
       if [[ "$http_status" -lt 500 ]]; then
         break
       fi

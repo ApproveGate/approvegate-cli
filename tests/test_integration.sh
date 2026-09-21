@@ -127,6 +127,7 @@ out="$(run_check servererror)"; code=$?
 assert_eq "servererror: exit code" "2" "$code"
 assert_contains "servererror: distinct unreachable message" "$out" "Approvegate API unreachable"
 assert_contains "servererror: mentions retry attempts" "$out" "attempt"
+assert_contains "servererror: prints API error response" "$out" "Approvegate API error response: internal error"
 
 GITHUB_OUTPUT_FILE="$(mktemp)"
 GITHUB_STEP_SUMMARY_FILE="$(mktemp)"
@@ -134,6 +135,7 @@ rm -f approvegate-unverified-deploy.json
 out="$(GITHUB_OUTPUT="$GITHUB_OUTPUT_FILE" GITHUB_STEP_SUMMARY="$GITHUB_STEP_SUMMARY_FILE" run_check servererror --on-unreachable allow)"; code=$?
 assert_eq "servererror with on-unreachable allow: exit code" "0" "$code"
 assert_contains "servererror with on-unreachable allow: output explains unverified deploy" "$out" "allowed without verification"
+assert_contains "servererror with on-unreachable allow: prints API error response" "$out" "Approvegate API error response: internal error"
 assert_contains "servererror with on-unreachable allow: writes decision output" "$(cat "$GITHUB_OUTPUT_FILE")" "decision=allow"
 assert_contains "servererror with on-unreachable allow: writes unverified output" "$(cat "$GITHUB_OUTPUT_FILE")" "unverified=true"
 assert_contains "servererror with on-unreachable allow: writes summary" "$(cat "$GITHUB_STEP_SUMMARY_FILE")" "Deploy proceeded without ApproveGate verification"

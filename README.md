@@ -109,6 +109,39 @@ The job fails (non-zero exit) if the deploy isn't approved, if Approvegate is
 unreachable, or if required inputs are missing. The only exception is the explicit
 `on-unreachable: allow` fallback.
 
+### Output
+
+After the decision, the check prints an aligned summary followed by the verdict. The same block is
+written to the job's step summary (`$GITHUB_STEP_SUMMARY`) with a link back to the release request.
+
+```
+  artifact   9f2a1c4e7b0d…a83c17b
+  request    ledger-api v2.14.3 · CHG-4471
+  approval   APPROVED by maya.chen@acmepay.com
+  sod        satisfied · jordan.doe ≠ maya.chen
+  window     valid until 2026-10-08 14:38 UTC
+  freeze     none active
+
+ALLOW
+```
+
+When the deploy is blocked, the verdict is followed by a one-line reason and the exit status:
+
+```
+  approval   PENDING · awaiting approval
+  ...
+
+BLOCK
+v2.14.3 has not been approved for production deployment.
+exit 1 · pipeline stopped
+```
+
+The `approval`, `sod`, `window` and `freeze` lines come from the optional `details` object in the
+`/api/v1/checks` response. Against an older ApproveGate server without it, only `artifact` and
+`request` are shown, and the block reason maps the response `code` (`PENDING`, `EXPIRED`,
+`REVOKED`, `ARTIFACT_MISMATCH`, `DEPLOY_FROZEN`, …) to a sentence, falling back to the API's own
+`reason`. The `decision`/`unverified`/`reason` outputs and exit codes are unchanged.
+
 ## Emergency override
 
 `force-approve` is the manual override for a deploy Approvegate can reach and

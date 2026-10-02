@@ -237,6 +237,39 @@ assert_contains "sha-only: request includes artifactSha" "$logged_body" '"artifa
 assert_not_contains "sha-only: request omits release" "$logged_body" '"release"'
 assert_not_contains "sha-only: request omits branch" "$logged_body" '"branch"'
 
+# --- allow with details: aligned field block, verdict and step summary ---
+SUMMARY_FILE="$(mktemp)"
+out="$(GITHUB_STEP_SUMMARY="$SUMMARY_FILE" run_check allowdetails)"; code=$?
+assert_eq "allowdetails: exit code" "0" "$code"
+assert_contains "allowdetails: keeps legacy decision line" "$out" "Approvegate decision: allow"
+assert_contains "allowdetails: artifact line" "$out" "  artifact   9f2a1c4e7b0d…a83c17b"
+assert_contains "allowdetails: request line" "$out" "  request    test-svc v1.1.0 · CHG-4471"
+assert_contains "allowdetails: approval line" "$out" "  approval   APPROVED by maya.chen@acmepay.com"
+assert_contains "allowdetails: sod line" "$out" "  sod        satisfied · jordan.doe ≠ maya.chen"
+assert_contains "allowdetails: window line" "$out" "  window     valid until 2026-10-08 14:38 UTC"
+assert_contains "allowdetails: freeze line" "$out" "  freeze     none active"
+assert_contains "allowdetails: verdict" "$out" $'\nALLOW'
+summary="$(cat "$SUMMARY_FILE")"
+assert_contains "allowdetails: summary heading" "$summary" "## ApproveGate deploy check: ALLOW"
+assert_contains "allowdetails: summary has the field block" "$summary" "  approval   APPROVED by maya.chen@acmepay.com"
+assert_contains "allowdetails: summary links the request" "$summary" "[View the release request](http://localhost:3000/app/acme-pay/release-requests/approval-123)"
+
+# --- block with details: PENDING maps to a one-line human reason ---
+SUMMARY_FILE="$(mktemp)"
+out="$(GITHUB_STEP_SUMMARY="$SUMMARY_FILE" run_check blockpending)"; code=$?
+assert_eq "blockpending: exit code" "1" "$code"
+assert_contains "blockpending: approval line" "$out" "  approval   PENDING · awaiting approval"
+assert_contains "blockpending: sod line while pending" "$out" "  sod        pending · requested by jordan.doe"
+assert_contains "blockpending: verdict" "$out" $'\nBLOCK'
+assert_contains "blockpending: human reason" "$out" "v1.1.0 has not been approved for staging deployment."
+assert_contains "blockpending: pipeline stopped line" "$out" "exit 1 · pipeline stopped"
+assert_contains "blockpending: summary reason" "$(cat "$SUMMARY_FILE")" "v1.1.0 has not been approved for staging deployment."
+
+# --- block without details still prints verdict and API reason ---
+out="$(run_check block)"; code=$?
+assert_contains "block without details: verdict" "$out" $'\nBLOCK'
+assert_contains "block without details: falls back to API reason" "$out" "No deploy authorization recorded for release."
+
 echo
 echo "integration tests: $pass_count passed, $fail_count failed"
 [[ $fail_count -eq 0 ]]

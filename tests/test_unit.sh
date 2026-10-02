@@ -57,6 +57,52 @@ assert_eq "branch ref extracts branch" \
 assert_eq "tag ref extracts no branch" \
   "" "$(extract_branch_from_ref "refs/tags/v2.14.3")"
 
+# --- display_sha ---
+
+assert_eq "long sha is shortened" \
+  "9f2a1c4e7b0d…a83c17b" "$(display_sha "9f2a1c4e7b0d11223344556677889900aa83c17b")"
+
+assert_eq "short sha passes through" \
+  "abc123def456" "$(display_sha "abc123def456")"
+
+assert_eq "empty sha shows none" \
+  "(none)" "$(display_sha "")"
+
+# --- reason_for_code ---
+
+assert_eq "PENDING reason names release and environment" \
+  "v2.14.3 has not been approved for production deployment." "$(reason_for_code PENDING v2.14.3 production "raw")"
+
+assert_eq "DEPLOY_FROZEN reason names environment" \
+  "production is inside a deploy freeze window." "$(reason_for_code DEPLOY_FROZEN v2.14.3 production "raw")"
+
+assert_eq "ARTIFACT_MISMATCH reason" \
+  "The artifact being deployed does not match the SHA bound to the approval." "$(reason_for_code ARTIFACT_MISMATCH v2.14.3 production "raw")"
+
+assert_eq "unknown code falls back to the API reason" \
+  "Something custom." "$(reason_for_code SOMETHING_NEW v2.14.3 production "Something custom.")"
+
+# --- render_result_block ---
+
+SERVICE="ledger-api"
+RELEASE="v2.14.3"
+BRANCH=""
+details_body='{"decision":"allow","details":{"artifactSha":"9f2a1c4e7b0d11223344556677889900aa83c17b","approval":{"status":"APPROVED","release":"v2.14.3","branch":null,"ticketRef":"CHG-4471","approverEmail":"maya.chen@acmepay.com","requesterEmail":"jordan.doe@acmepay.com","validUntil":"2026-10-08T14:38:00.000Z"},"sod":{"mode":"ENFORCING","satisfied":true,"requester":"jordan.doe","approver":"maya.chen"},"freeze":{"active":false,"windowReason":null,"overridden":false}}}'
+block="$(render_result_block "$details_body" "fallbacksha")"
+assert_contains "block: artifact line uses details sha" "$block" "  artifact   9f2a1c4e7b0d…a83c17b"
+assert_contains "block: request line includes ticket" "$block" "  request    ledger-api v2.14.3 · CHG-4471"
+assert_contains "block: approval line" "$block" "  approval   APPROVED by maya.chen@acmepay.com"
+assert_contains "block: sod line" "$block" "  sod        satisfied · jordan.doe ≠ maya.chen"
+assert_contains "block: window line" "$block" "  window     valid until 2026-10-08 14:38 UTC"
+assert_contains "block: freeze line" "$block" "  freeze     none active"
+
+block="$(render_result_block '{"decision":"block","reason":"x"}' "abc123def456")"
+assert_contains "no details: artifact line falls back to GITHUB_SHA" "$block" "  artifact   abc123def456"
+assert_contains "no details: request line" "$block" "  request    ledger-api v2.14.3"
+assert_eq "no details: only two lines" "2" "$(printf '%s\n' "$block" | wc -l | tr -d ' ')"
+SERVICE=""
+RELEASE=""
+
 # --- CLI validation (black-box subprocess; must fail before any API call) ---
 
 run_check() {

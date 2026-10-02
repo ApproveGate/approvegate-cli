@@ -145,6 +145,103 @@ collect_github_pipeline_statuses() {
   printf '%s' "$jobs_response" | jq -c '[.jobs[]? | select(.status == "completed" and .conclusion != null) | {name, conclusion, url: .html_url}] | .[:50]' 2>/dev/null || printf '%s' "[]"
 }
 
+# Shortens a SHA for display: 9f2a1c4e7b0d…a83c17b. Short values pass through.
+display_sha() {
+  local value="$1"
+  if [[ -z "$value" ]]; then
+    printf '%s' "(none)"
+  elif [[ ${#value} -gt 22 ]]; then
+    printf '%s' "${value:0:12}…${value: -7}"
+  else
+    printf '%s' "$value"
+  fi
+}
+
+# One-line human reason for an API block code. Falls back to the API's own reason text.
+reason_for_code() {
+  local code="$1" target="$2" environment="$3" api_reason="$4"
+  case "$code" in
+    PENDING) printf '%s' "${target} has not been approved for ${environment} deployment." ;;
+    EXPIRED) printf '%s' "The approval for ${target} has expired; request a new one." ;;
+    REVOKED) printf '%s' "The approval for ${target} was revoked." ;;
+    NOT_FOUND) printf '%s' "No release request found for ${target} in ${environment}." ;;
+    ARTIFACT_MISMATCH) printf '%s' "The artifact being deployed does not match the SHA bound to the approval." ;;
+    FORCE_APPROVE_REASON_REQUIRED) printf '%s' "Force-approve requires a --reason." ;;
+    DEPLOY_FROZEN) printf '%s' "${environment} is inside a deploy freeze window." ;;
+    POLICY_VIOLATION) printf '%s' "The deploy violates the separation-of-duties policy." ;;
+    MISSING_FIELD) printf '%s' "The check request is missing a required field." ;;
+    *) printf '%s' "${api_reason:-No reason provided.}" ;;
+  esac
+}
+
+# Aligned field block shown in logs and the step summary (artifact, request, approval, sod,
+# window, freeze). Lines the API didn't describe (no `details`) are left out.
+render_result_block() {
+  local body="$1" artifact_sha="$2"
+  local target="${RELEASE:-$BRANCH}"
+  local has_details
+  has_details="$(printf '%s' "$body" | jq -r 'if (.details | type) == "object" then "yes" else "no" end' 2>/dev/null || echo no)"
+
+  local sha="$artifact_sha"
+  local ticket=""
+  if [[ "$has_details" == "yes" ]]; then
+    sha="$(printf '%s' "$body" | jq -r --arg fallback "$artifact_sha" '.details.artifactSha // $fallback')"
+    ticket="$(printf '%s' "$body" | jq -r '.details.approval.ticketRef // ""')"
+    local detail_target
+    detail_target="$(printf '%s' "$body" | jq -r '.details.approval.release // .details.approval.branch // ""')"
+    target="${target:-$detail_target}"
+  fi
+
+  printf '  %-10s %s\n' "artifact" "$(display_sha "$sha")"
+  printf '  %-10s %s\n' "request" "${SERVICE} ${target:-${CHANGE_REQUEST_ID:-(unknown)}}${ticket:+ · $ticket}"
+
+  if [[ "$has_details" != "yes" ]]; then
+    return 0
+  fi
+
+  printf '%s' "$body" | jq -r '
+    def pad: . as $s | ($s + "          ")[0:10];
+    .details as $d
+    | ($d.approval.status) as $status
+    | [
+        "  " + ("approval" | pad) + " "
+          + (if $status == "APPROVED" then "APPROVED" + (if $d.approval.approverEmail then " by " + $d.approval.approverEmail else "" end)
+             elif $status == "PENDING" then "PENDING · awaiting approval"
+             else $status end),
+        "  " + ("sod" | pad) + " "
+          + (if $d.sod.mode == null then "not enforced"
+             elif $status == "PENDING" then "pending" + (if $d.sod.requester then " · requested by " + $d.sod.requester else "" end)
+             elif $d.sod.satisfied then "satisfied" + (if $d.sod.requester and $d.sod.approver then " · " + $d.sod.requester + " ≠ " + $d.sod.approver else "" end)
+             else "violation (" + ($d.sod.mode | ascii_downcase) + ")" end),
+        "  " + ("window" | pad) + " "
+          + (if $d.approval.validUntil then "valid until " + ($d.approval.validUntil[0:16] | sub("T"; " ")) + " UTC" else "no expiry" end),
+        "  " + ("freeze" | pad) + " "
+          + (if $d.freeze.active and $d.freeze.overridden then "overridden" + (if $d.freeze.windowReason then " · " + $d.freeze.windowReason else "" end)
+             elif $d.freeze.active then "active" + (if $d.freeze.windowReason then " · " + $d.freeze.windowReason else "" end)
+             else "none active" end)
+      ]
+    | .[]' 2>/dev/null || true
+}
+
+# Writes the same block to the GitHub step summary, with a link back to the release request.
+append_result_summary() {
+  local block="$1" verdict="$2" reason_line="$3" release_request_url="$4"
+  append_summary "## ApproveGate deploy check: ${verdict}"
+  append_summary ""
+  append_summary '```'
+  append_summary "$block"
+  append_summary ""
+  append_summary "$verdict"
+  if [[ -n "$reason_line" ]]; then
+    append_summary "$reason_line"
+  fi
+  append_summary '```'
+  if [[ -n "$release_request_url" ]]; then
+    append_summary ""
+    append_summary "[View the release request](${release_request_url})"
+  fi
+}
+
 write_unverified_deploy_file() {
   local artifact_sha="$1"
   local reason_text="$2"
@@ -400,9 +497,16 @@ main() {
   local decision=""
   local reason_text=""
   local release_request_url=""
+  local code=""
   if decision="$(printf '%s' "$body" | jq -er '.decision' 2>/dev/null)"; then
     reason_text="$(printf '%s' "$body" | jq -r '.reason // "(no reason provided)"' 2>/dev/null)"
     release_request_url="$(printf '%s' "$body" | jq -r '.releaseRequestUrl // .links.releaseRequest // .releaseRequestPath // ""' 2>/dev/null)"
+    code="$(printf '%s' "$body" | jq -r '.code // ""' 2>/dev/null)"
+  fi
+
+  local result_block=""
+  if [[ "$decision" == "allow" || "$decision" == "block" ]]; then
+    result_block="$(render_result_block "$body" "$artifact_sha")"
   fi
 
   case "$decision" in
@@ -412,6 +516,10 @@ main() {
         echo "Approvegate release request: ${release_request_url}"
       fi
       echo "Approvegate: deploy allowed for ${SERVICE}@${RELEASE:-$BRANCH} in ${ENVIRONMENT}. ${reason_text}"
+      echo
+      printf '%s\n\n' "$result_block"
+      echo "ALLOW"
+      append_result_summary "$result_block" "ALLOW" "" "$release_request_url"
       write_output "decision" "allow"
       write_output "unverified" "false"
       write_output "reason" "$reason_text"
@@ -423,6 +531,16 @@ main() {
         echo "Approvegate release request: ${release_request_url}" >&2
       fi
       echo "Approvegate: deploy blocked for ${SERVICE}@${RELEASE:-$BRANCH} in ${ENVIRONMENT}: ${reason_text}" >&2
+      local human_reason
+      human_reason="$(reason_for_code "$code" "${RELEASE:-${BRANCH:-this deploy}}" "$ENVIRONMENT" "$reason_text")"
+      {
+        echo
+        printf '%s\n\n' "$result_block"
+        echo "BLOCK"
+        echo "$human_reason"
+        echo "exit 1 · pipeline stopped"
+      } >&2
+      append_result_summary "$result_block" "BLOCK" "$human_reason" "$release_request_url"
       write_output "decision" "block"
       write_output "unverified" "false"
       write_output "reason" "$reason_text"

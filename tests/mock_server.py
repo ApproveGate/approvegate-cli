@@ -12,6 +12,8 @@ Modes:
   /mode/servererror -> 500 plain text (exercises the "unreachable" 5xx path)
   /mode/malformed   -> 200 body that isn't valid JSON
   /mode/hang        -> sleeps 5s before responding (exercises the timeout path)
+  /mode/allowdetails -> 200 allow with the optional `details` object and code ALLOW
+  /mode/blockpending -> 200 block, code PENDING, with `details` for a pending approval
 
 If REQUEST_LOG_FILE is set in the environment, each request's JSON body is
 appended to that file as one line, so tests can assert what was actually sent.
@@ -100,6 +102,34 @@ class Handler(BaseHTTPRequestHandler):
                 resp = {"decision": "allow", "reason": body.get("reason") or "Force-approved override."}
             else:
                 resp = {"decision": "block", "reason": "No deploy authorization recorded."}
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(resp).encode())
+            return
+
+        if mode in ("allowdetails", "blockpending"):
+            pending = mode == "blockpending"
+            resp = {
+                "decision": "block" if pending else "allow",
+                "code": "PENDING" if pending else "ALLOW",
+                "reason": "Release request is pending approval." if pending else "Approved and artifact matches bound SHA.",
+                "releaseRequestUrl": "http://localhost:3000/app/acme-pay/release-requests/approval-123",
+                "details": {
+                    "artifactSha": "9f2a1c4e7b0d11223344556677889900aa83c17b",
+                    "approval": {
+                        "status": "PENDING" if pending else "APPROVED",
+                        "release": "v1.1.0",
+                        "branch": None,
+                        "ticketRef": "CHG-4471",
+                        "approverEmail": None if pending else "maya.chen@acmepay.com",
+                        "requesterEmail": "jordan.doe@acmepay.com",
+                        "validUntil": None if pending else "2026-10-08T14:38:00.000Z",
+                    },
+                    "sod": {"mode": "ENFORCING", "satisfied": True, "requester": "jordan.doe", "approver": None if pending else "maya.chen"},
+                    "freeze": {"active": False, "windowReason": None, "overridden": False},
+                },
+            }
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
